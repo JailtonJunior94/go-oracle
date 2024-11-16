@@ -1,0 +1,17 @@
+services:
+  oracle-db:
+    container_name: oracle-db
+    image: gvenzl/oracle-free:23.5-slim
+    environment:
+      ORACLE_PASSWORD: SuperPassword@2024
+    ports:
+      - 1521:1521
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+      start_interval: 5s
+    volumes:
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
