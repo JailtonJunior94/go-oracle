@@ -4,16 +4,73 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/jailtonjunior94/go-oracle/pkg/database/migrate"
 	_ "github.com/sijms/go-ora/v2"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func main() {
-	conn, err := sql.Open("oracle", "oracle://SYSTEM:SuperPassword@2024@localhost:1521/FREEPDB1")
+	ctx := context.Background()
+	absPath, err := filepath.Abs("../scripts/init.sql")
 	if err != nil {
-		fmt.Println("Can't open the driver: ", err)
-		return
+		panic(err)
+	}
+
+	req := testcontainers.ContainerRequest{
+		Image:        "gvenzl/oracle-free:23.5-slim",
+		ExposedPorts: []string{"1521/tcp"},
+		Env: map[string]string{
+			"ORACLE_PASSWORD": "SuperPassword",
+		},
+		Files: []testcontainers.ContainerFile{
+			{
+				FileMode:          0o755,
+				HostFilePath:      absPath,
+				ContainerFilePath: "/docker-entrypoint-initdb.d/init.sql",
+			},
+		},
+		WaitingFor: wait.ForLog("Completed: ALTER DATABASE OPEN"),
+	}
+
+	oracleContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer oracleContainer.Terminate(ctx)
+
+	host, err := oracleContainer.Host(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	port, err := oracleContainer.MappedPort(ctx, "1521")
+	if err != nil {
+		panic(err)
+	}
+
+	conn, err := sql.Open("oracle", fmt.Sprintf("oracle://SYSTEM:SuperPassword@%s:%s/FREEPDB1", host, port.Port()))
+	if err != nil {
+		panic(err)
+	}
+
+	if err = conn.Ping(); err != nil {
+		fmt.Println("Can't connect to the database: ", err)
+	}
+
+	migration, err := migrate.NewMigrateOracle(conn, "file://../database/migrations", "FREEPDB1")
+	if err != nil {
+		panic(err)
+	}
+
+	if err = migration.Execute(); err != nil {
+		panic(err)
 	}
 
 	defer func() {
@@ -22,10 +79,6 @@ func main() {
 			fmt.Println("Can't close connection: ", err)
 		}
 	}()
-
-	if err = conn.Ping(); err != nil {
-		fmt.Println("Can't connect to the database: ", err)
-	}
 
 	users, err := getUsers(context.Background(), conn)
 	if err != nil {
