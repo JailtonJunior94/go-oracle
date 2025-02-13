@@ -20,7 +20,7 @@ func main() {
 		Use:   "migrate",
 		Short: "Go Oracle Migrations",
 		Run: func(cmd *cobra.Command, args []string) {
-			conn, err := sql.Open("oracle", "oracle://SYSTEM:SuperPassword@2025@localhost:1521/FREEPDB1")
+			conn, err := sql.Open("oracle", "oracle://orcl:SuperPassword@2025@localhost:1521/FREEPDB1")
 			if err != nil {
 				log.Fatalf("error connecting to database: %v", err)
 			}
